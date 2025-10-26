@@ -90,11 +90,12 @@ async fn main() -> anyhow::Result<()> {
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http())
                 .layer(HandleErrorLayer::new(|err: BoxError| async move {
-                    if err.is::<tower::timeout::error::Elapsed>() {
-                        (StatusCode::REQUEST_TIMEOUT, "timeout")
+                    let (code, msg) = if err.is::<tower::timeout::error::Elapsed>() {
+                        (StatusCode::REQUEST_TIMEOUT, "timeout".to_string())
                     } else {
                         (StatusCode::INTERNAL_SERVER_ERROR, format!("error: {err}"))
-                    }
+                    };
+                    (code, msg)
                 }))
                 .layer(TimeoutLayer::new(Duration::from_secs(10)))
                 .layer(RequestBodyLimitLayer::new(BYTES_1_MB))
