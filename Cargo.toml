@@ -12,7 +12,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 tracing-opentelemetry = "0.27"
 opentelemetry = { version = "0.26", features = ["trace"] }
-opentelemetry-sdk = { version = "0.26", features = ["trace"] }
+opentelemetry_sdk = { version = "0.26", features = ["trace"] }
 opentelemetry-otlp = { version = "0.26", features = ["http-proto"] }
 thiserror = "1.0"
 anyhow = "1.0"
