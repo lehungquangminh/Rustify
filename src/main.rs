@@ -19,7 +19,7 @@ use opentelemetry_sdk::propagation::TraceContextPropagator;
 use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
 use tokio::{sync::mpsc, task::JoinHandle};
-use tower::{ServiceBuilder};
+use tower::ServiceBuilder;
 use tower::timeout::TimeoutLayer;
 use tower_governor::{GovernorLayer, key_extractor::SmartIpKeyExtractor, governor::GovernorConfigBuilder};
 use tower_http::{
@@ -35,6 +35,8 @@ use crate::state::AppState;
 use crate::clicks::start_click_flusher;
 use crate::routes::{index::index, shorten::shorten, resolve::resolve, stats::stats};
 
+const BYTES_1_MB: usize = 1024 * 1024;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     init_tracing();
@@ -49,28 +51,22 @@ async fn main() -> anyhow::Result<()> {
     let cache_ttl: usize = std::env::var("CACHE_TTL_SECS")
         .ok().and_then(|s| s.parse().ok()).unwrap_or(600);
 
-    // DB
     let pool = PgPoolOptions::new()
         .max_connections(8)
         .connect(&database_url)
         .await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
 
-    // Redis
     let client = redis::Client::open(redis_url)?;
     let redis = ConnectionManager::new(client).await?;
 
-    // Click flusher
     let (tx, rx) = mpsc::unbounded_channel();
     let flush = start_click_flusher(pool.clone(), rx);
 
-    // Shared state
     let state = AppState { pool, redis, base_url, cache_ttl, click_tx: tx };
 
-    // Metrics
     let (metrics_layer, metrics_handle) = PrometheusMetricLayer::pair();
 
-    // Rate limit config
     let governor_conf = GovernorConfigBuilder::default()
         .per_second(1)
         .burst_size(60)
@@ -79,7 +75,6 @@ async fn main() -> anyhow::Result<()> {
         .expect("governor");
     let governor_conf = Arc::new(governor_conf);
 
-    // Base router
     let app = Router::new()
         .route("/", get(index))
         .route("/shorten", post(shorten))
@@ -87,26 +82,22 @@ async fn main() -> anyhow::Result<()> {
         .route("/:alias", get(resolve))
         .nest_service("/static", ServeDir::new("static"))
         .with_state(state)
-        // Middlewares that may error must go via route_layer + ServiceBuilder
         .route_layer(
             ServiceBuilder::new()
-                // Put HandleError OUTER, Timeout INNER so it catches timeout errors
+                .layer(TimeoutLayer::new(Duration::from_secs(10)))
                 .layer(HandleErrorLayer::new(|e: BoxError| async move {
                     (
                         axum::http::StatusCode::REQUEST_TIMEOUT,
                         format!("timeout: {e}"),
                     )
                 }))
-                .layer(TimeoutLayer::new(Duration::from_secs(10)))
                 .into_inner(),
         )
-        // These are infallible layers, safe to use at top-level .layer
-        .layer(RequestBodyLimitLayer::new(1 * 1024 * 1024))
+        .layer(RequestBodyLimitLayer::new(BYTES_1_MB))
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
         .layer(TraceLayer::new_for_http())
         .route_layer(GovernorLayer { config: governor_conf.clone() })
         .layer(metrics_layer)
-        // Single metrics endpoint
         .route("/metrics", get({
             let h = metrics_handle.clone();
             move || async move { h.render() }
