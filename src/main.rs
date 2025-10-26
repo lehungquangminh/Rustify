@@ -24,6 +24,7 @@ use tower_http::{
     cors::{Any, CorsLayer},
     services::ServeDir,
     trace::TraceLayer,
+    limit::RequestBodyLimitLayer,
 };
 use tracing::{info};
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
@@ -81,6 +82,7 @@ async fn main() -> anyhow::Result<()> {
                 }))
                 .layer(TraceLayer::new_for_http())
                 .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
+                .layer(RequestBodyLimitLayer::new(1 * 1024 * 1024))
                 .layer(TimeoutLayer::new(Duration::from_secs(10)))
         )
         .route_layer(GovernorLayer { config: governor_conf.clone() })
