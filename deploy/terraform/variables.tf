@@ -1,0 +1,11 @@
+variable "aws_region" { type = string }
+variable "cluster_name" { type = string }
+variable "domain" { type = string }
+variable "vpc_id" { type = string }
+variable "private_subnet_ids" { type = list(string) }
+variable "public_subnet_ids" { type = list(string) }
+variable "db_username" { type = string }
+variable "db_name" { type = string }
+variable "db_instance_class" { type = string }
+variable "redis_node_type" { type = string }
+variable "hosted_zone_id" { type = string }

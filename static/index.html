@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rustify — URL Shortener</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="container">
+    <h1>Rustify</h1>
+    <p class="subtitle">URL Shortener hiệu năng cao (Rust + Axum)</p>
+
+    <form id="shorten-form">
+      <label>URL gốc</label>
+      <input type="url" id="url" placeholder="https://example.com" required>
+
+      <label>Alias (tùy chọn)</label>
+      <input type="text" id="alias" placeholder="vd: hello">
+
+      <button type="submit">Rút gọn</button>
+    </form>
+
+    <div id="result" class="card hidden">
+      <h3>Kết quả</h3>
+      <p><a id="short-link" href="#" target="_blank" rel="noopener"></a></p>
+      <img id="qr" alt="QR" />
+    </div>
+
+    <div id="stats" class="card hidden">
+      <h3>Thống kê</h3>
+      <pre id="stats-json"></pre>
+    </div>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
