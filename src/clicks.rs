@@ -13,15 +13,13 @@ pub fn start_click_flusher(pool: PgPool, mut rx: mpsc::UnboundedReceiver<String>
                 _ = tick.tick() => {
                     if counts.is_empty() { continue; }
                     let data: Vec<(String, i64)> = counts.drain().collect();
-                    let mut tx = match pool.begin().await { Ok(t) => t, Err(e) => { error!(?e, "tx"); continue; } };
                     for (alias, n) in data {
                         let _ = sqlx::query("INSERT INTO clicks(alias, ts, n) VALUES ($1, now(), $2)")
                             .bind(&alias)
                             .bind(n)
-                            .execute(&mut tx)
+                            .execute(&pool)
                             .await;
                     }
-                    let _ = tx.commit().await;
                 }
                 msg = rx.recv() => {
                     if let Some(a) = msg { *counts.entry(a).or_default() += 1; }

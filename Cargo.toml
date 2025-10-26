@@ -16,7 +16,6 @@ opentelemetry-otlp = { version = "0.26", features = ["http-proto"] }
 thiserror = "1.0"
 anyhow = "1.0"
 uuid = { version = "1", features = ["v4"] }
-base62 = "2.0"
 rand = "0.8"
 url = "2.5"
 qrcode = "0.14"
@@ -25,9 +24,9 @@ bytes = "1.6"
 time = "0.3"
 async-trait = "0.1"
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
-sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "time", "macros"] }
+sqlx = { version = "0.7", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "time", "macros", "migrate"] }
 axum-prometheus = "0.6"
-tower = "0.4"
+tower = { version = "0.4", features = ["timeout"] }
 tower-http = { version = "0.5", features = ["trace", "cors", "fs"] }
 tower_governor = "0.5"
 dotenvy = "0.15"

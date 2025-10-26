@@ -12,6 +12,13 @@ pub async fn get_target(state: &AppState, alias: &str) -> Result<String, AppErro
         .fetch_optional(&state.pool)
         .await?;
     let url: String = if let Some(r) = rec { r.try_get("url").unwrap() } else { return Err(AppError::NotFound) };
-    let _: () = r.set_ex(format!("alias:{alias}"), &url, state.cache_ttl).await.unwrap_or(());
+    let _: () = r
+        .set_ex(
+            format!("alias:{alias}"),
+            &url,
+            state.cache_ttl.try_into().unwrap(),
+        )
+        .await
+        .unwrap_or(());
     Ok(url)
 }

@@ -37,7 +37,13 @@ pub async fn shorten(State(state): State<AppState>, Json(req): Json<ShortenReque
     };
 
     let mut r = state.redis.clone();
-    let _: () = r.set_ex(format!("alias:{alias}"), &target, state.cache_ttl).await?;
+    let _: () = r
+        .set_ex(
+            format!("alias:{alias}"),
+            &target,
+            state.cache_ttl.try_into().unwrap(),
+        )
+        .await?;
 
     let short_url = format!("{}/{}", state.base_url.trim_end_matches('/'), alias);
     Ok((axum::http::StatusCode::CREATED, Json(ShortenResponse { alias, short_url })))

@@ -1,10 +1,9 @@
 use rand::{distributions::Alphanumeric, Rng};
 
 pub fn gen_alias() -> String {
-    let s: String = rand::thread_rng()
+    rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(7)
         .map(char::from)
-        .collect();
-    base62::encode(s)
+        .collect()
 }

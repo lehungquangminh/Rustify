@@ -13,7 +13,8 @@ use axum::{
     Router,
 };
 use axum_prometheus::PrometheusMetricLayer;
-use opentelemetry::sdk::{self, propagation::TraceContextPropagator};
+use opentelemetry::propagation::TraceContextPropagator;
+use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
 use tokio::{sync::mpsc, task::JoinHandle};
 use tower::{ServiceBuilder, timeout::TimeoutLayer};
@@ -50,14 +51,16 @@ async fn main() -> anyhow::Result<()> {
 
     let state = AppState { pool, redis, base_url, cache_ttl, click_tx: tx };
 
-    let metrics = PrometheusMetricLayer::new();
+    let (metrics_layer, metrics_handle) = PrometheusMetricLayer::pair();
 
+    use std::sync::Arc;
     let governor_conf = GovernorConfigBuilder::default()
         .per_second(1)
         .burst_size(60)
         .key_extractor(SmartIpKeyExtractor)
         .finish()
         .expect("governor");
+    let governor_conf = Arc::new(governor_conf);
 
     let app = Router::new()
         .route("/", get(index))
@@ -72,13 +75,13 @@ async fn main() -> anyhow::Result<()> {
                 .layer(TraceLayer::new_for_http())
                 .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
                 .layer(TimeoutLayer::new(Duration::from_secs(10)))
-                .layer(GovernorLayer::new(&governor_conf))
+                .layer(GovernorLayer::new(governor_conf.clone()))
         )
-        .layer(metrics);
+        .layer(metrics_layer);
 
-    let recorder_handle = metrics.handle();
+    let handle_clone = metrics_handle.clone();
     let app = app.route("/metrics", get(move || {
-        let h = recorder_handle.clone();
+        let h = handle_clone.clone();
         async move { h.render() }
     }));
 
