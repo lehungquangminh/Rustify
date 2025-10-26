@@ -1,8 +1,8 @@
 # Rustify — URL Shortener hiệu năng cao (Rust + Axum)
 
-[![CI](https://github.com/YOUR_GH_USER/Rustify/actions/workflows/ci.yml/badge.svg)](https://github.com/lehungquangminh/Rustify/actions/workflows/ci.yml)
-[![Release](https://github.com/YOUR_GH_USER/Rustify/actions/workflows/release.yml/badge.svg)](https://github.com/lehungquangminh/Rustify/actions/workflows/release.yml)
-[![CodeQL](https://github.com/YOUR_GH_USER/Rustify/actions/workflows/codeql.yml/badge.svg)](https://github.com/lehungquangminh/Rustify/actions/workflows/codeql.yml)
+[![CI](https://github.com/lehungquangminh/Rustify/actions/workflows/ci.yml/badge.svg)](https://github.com/lehungquangminh/Rustify/actions/workflows/ci.yml)
+[![Release](https://github.com/lehungquangminh/Rustify/actions/workflows/release.yml/badge.svg)](https://github.com/lehungquangminh/Rustify/actions/workflows/release.yml)
+[![CodeQL](https://github.com/lehungquangminh/Rustify/actions/workflows/codeql.yml/badge.svg)](https://github.com/lehungquangminh/Rustify/actions/workflows/codeql.yml)
 [![Trivy](https://img.shields.io/badge/Trivy-Security%20Scan-4c1?logo=aqua&logoColor=white)](https://github.com/lehungquangminh/Rustify/actions/workflows/ci.yml)
 
 Rustify là dịch vụ rút gọn liên kết hiệu năng cao, có thống kê (stats), rate limit, cache Redis, và quan sát hệ thống (Observability) đầy đủ, sẵn sàng cho Kubernetes.
