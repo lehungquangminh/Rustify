@@ -18,7 +18,7 @@ use opentelemetry_sdk::propagation::TraceContextPropagator;
 use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
 use tokio::{sync::mpsc, task::JoinHandle};
-use tower::{ServiceBuilder, timeout::TimeoutLayer};
+use tower::timeout::TimeoutLayer;
 use tower_governor::{GovernorLayer, key_extractor::SmartIpKeyExtractor, governor::GovernorConfigBuilder};
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -73,15 +73,15 @@ async fn main() -> anyhow::Result<()> {
         .nest_service("/static", ServeDir::new("static"))
         .with_state(state)
         .layer(TimeoutLayer::new(Duration::from_secs(10)))
+        .layer(HandleErrorLayer::new(|e: BoxError| async move {
+            (
+                axum::http::StatusCode::REQUEST_TIMEOUT,
+                format!("timeout: {e}"),
+            )
+        }))
         .layer(RequestBodyLimitLayer::new(1 * 1024 * 1024))
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
         .layer(TraceLayer::new_for_http())
-        .layer(HandleErrorLayer::new(|e: BoxError| async move {
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                format!("middleware error: {e}"),
-            )
-        }))
         .route_layer(GovernorLayer { config: governor_conf.clone() })
         .layer(metrics_layer);
 
