@@ -1,7 +1,6 @@
 use std::time::Duration;
 use sqlx::PgPool;
 use tokio::{sync::mpsc, task::JoinHandle};
-use tracing::error;
 
 pub fn start_click_flusher(pool: PgPool, mut rx: mpsc::UnboundedReceiver<String>) -> JoinHandle<()> {
     tokio::spawn(async move {

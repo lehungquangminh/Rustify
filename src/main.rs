@@ -13,7 +13,7 @@ use axum::{
     Router,
 };
 use axum_prometheus::PrometheusMetricLayer;
-use opentelemetry::propagation::TraceContextPropagator;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
 use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -75,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
                 .layer(TraceLayer::new_for_http())
                 .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
                 .layer(TimeoutLayer::new(Duration::from_secs(10)))
-                .layer(GovernorLayer::new(governor_conf.clone()))
+                .layer(GovernorLayer { config: governor_conf.clone() })
         )
         .layer(metrics_layer);
 
