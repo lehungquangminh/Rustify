@@ -72,19 +72,16 @@ async fn main() -> anyhow::Result<()> {
         .route("/:alias", get(resolve))
         .nest_service("/static", ServeDir::new("static"))
         .with_state(state)
-        .layer(
-            ServiceBuilder::new()
-                .layer(HandleErrorLayer::new(|e: BoxError| async move {
-                    (
-                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("middleware error: {e}"),
-                    )
-                }))
-                .layer(TraceLayer::new_for_http())
-                .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
-                .layer(RequestBodyLimitLayer::new(1 * 1024 * 1024))
-                .layer(TimeoutLayer::new(Duration::from_secs(10)))
-        )
+        .layer(TimeoutLayer::new(Duration::from_secs(10)))
+        .layer(RequestBodyLimitLayer::new(1 * 1024 * 1024))
+        .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
+        .layer(TraceLayer::new_for_http())
+        .layer(HandleErrorLayer::new(|e: BoxError| async move {
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                format!("middleware error: {e}"),
+            )
+        }))
         .route_layer(GovernorLayer { config: governor_conf.clone() })
         .layer(metrics_layer);
 
