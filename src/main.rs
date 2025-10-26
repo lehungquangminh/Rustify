@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, time::Duration, sync::Arc};
 
 mod state;
 mod errors;
@@ -11,13 +11,15 @@ mod routes;
 use axum::{
     routing::{get, post},
     Router,
+    error_handling::HandleErrorLayer,
+    BoxError,
 };
-use axum::{error_handling::HandleErrorLayer, BoxError};
 use axum_prometheus::PrometheusMetricLayer;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use redis::aio::ConnectionManager;
 use sqlx::postgres::PgPoolOptions;
 use tokio::{sync::mpsc, task::JoinHandle};
+use tower::{ServiceBuilder};
 use tower::timeout::TimeoutLayer;
 use tower_governor::{GovernorLayer, key_extractor::SmartIpKeyExtractor, governor::GovernorConfigBuilder};
 use tower_http::{
@@ -26,8 +28,9 @@ use tower_http::{
     trace::TraceLayer,
     limit::RequestBodyLimitLayer,
 };
-use tracing::{info};
+use tracing::info;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+
 use crate::state::AppState;
 use crate::clicks::start_click_flusher;
 use crate::routes::{index::index, shorten::shorten, resolve::resolve, stats::stats};
@@ -37,25 +40,37 @@ async fn main() -> anyhow::Result<()> {
     init_tracing();
 
     dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/rustify".into());
-    let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into());
-    let base_url = std::env::var("BASE_URL").unwrap_or_else(|_| "http://localhost:8080".into());
-    let cache_ttl: usize = std::env::var("CACHE_TTL_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(600);
+    let database_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/rustify".into());
+    let redis_url = std::env::var("REDIS_URL")
+        .unwrap_or_else(|_| "redis://localhost:6379".into());
+    let base_url = std::env::var("BASE_URL")
+        .unwrap_or_else(|_| "http://localhost:8080".into());
+    let cache_ttl: usize = std::env::var("CACHE_TTL_SECS")
+        .ok().and_then(|s| s.parse().ok()).unwrap_or(600);
 
-    let pool = PgPoolOptions::new().max_connections(8).connect(&database_url).await?;
+    // DB
+    let pool = PgPoolOptions::new()
+        .max_connections(8)
+        .connect(&database_url)
+        .await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
 
+    // Redis
     let client = redis::Client::open(redis_url)?;
     let redis = ConnectionManager::new(client).await?;
 
+    // Click flusher
     let (tx, rx) = mpsc::unbounded_channel();
     let flush = start_click_flusher(pool.clone(), rx);
 
+    // Shared state
     let state = AppState { pool, redis, base_url, cache_ttl, click_tx: tx };
 
+    // Metrics
     let (metrics_layer, metrics_handle) = PrometheusMetricLayer::pair();
 
-    use std::sync::Arc;
+    // Rate limit config
     let governor_conf = GovernorConfigBuilder::default()
         .per_second(1)
         .burst_size(60)
@@ -64,36 +79,43 @@ async fn main() -> anyhow::Result<()> {
         .expect("governor");
     let governor_conf = Arc::new(governor_conf);
 
+    // Base router
     let app = Router::new()
         .route("/", get(index))
         .route("/shorten", post(shorten))
-        .route("/metrics", get(|| async move { "" }))
         .route("/stats/:alias", get(stats))
         .route("/:alias", get(resolve))
         .nest_service("/static", ServeDir::new("static"))
         .with_state(state)
-        .layer(TimeoutLayer::new(Duration::from_secs(10)))
-        .layer(HandleErrorLayer::new(|e: BoxError| async move {
-            (
-                axum::http::StatusCode::REQUEST_TIMEOUT,
-                format!("timeout: {e}"),
-            )
-        }))
+        // Middlewares that may error must go via route_layer + ServiceBuilder
+        .route_layer(
+            ServiceBuilder::new()
+                // Put HandleError OUTER, Timeout INNER so it catches timeout errors
+                .layer(HandleErrorLayer::new(|e: BoxError| async move {
+                    (
+                        axum::http::StatusCode::REQUEST_TIMEOUT,
+                        format!("timeout: {e}"),
+                    )
+                }))
+                .layer(TimeoutLayer::new(Duration::from_secs(10)))
+                .into_inner(),
+        )
+        // These are infallible layers, safe to use at top-level .layer
         .layer(RequestBodyLimitLayer::new(1 * 1024 * 1024))
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
         .layer(TraceLayer::new_for_http())
         .route_layer(GovernorLayer { config: governor_conf.clone() })
-        .layer(metrics_layer);
-
-    let handle_clone = metrics_handle.clone();
-    let app = app.route("/metrics", get(move || {
-        let h = handle_clone.clone();
-        async move { h.render() }
-    }));
+        .layer(metrics_layer)
+        // Single metrics endpoint
+        .route("/metrics", get({
+            let h = metrics_handle.clone();
+            move || async move { h.render() }
+        }));
 
     let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080);
     let addr: SocketAddr = ([0, 0, 0, 0], port).into();
     info!(%addr, "listening");
+
     axum::serve(tokio::net::TcpListener::bind(addr).await?, app)
         .with_graceful_shutdown(shutdown_signal(flush))
         .await?;
@@ -108,7 +130,8 @@ async fn shutdown_signal(flush: JoinHandle<()>) {
 
 fn init_tracing() {
     opentelemetry::global::set_text_map_propagator(TraceContextPropagator::new());
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,tower_http=info,sqlx=warn"));
+    let filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,tower_http=info,sqlx=warn"));
     tracing_subscriber::registry()
         .with(filter)
         .with(tracing_subscriber::fmt::layer())
