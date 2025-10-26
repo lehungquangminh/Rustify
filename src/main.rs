@@ -12,6 +12,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use axum::{error_handling::HandleErrorLayer, BoxError};
 use axum_prometheus::PrometheusMetricLayer;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use redis::aio::ConnectionManager;
@@ -72,11 +73,17 @@ async fn main() -> anyhow::Result<()> {
         .with_state(state)
         .layer(
             ServiceBuilder::new()
+                .layer(HandleErrorLayer::new(|e: BoxError| async move {
+                    (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("middleware error: {e}"),
+                    )
+                }))
                 .layer(TraceLayer::new_for_http())
                 .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
                 .layer(TimeoutLayer::new(Duration::from_secs(10)))
-                .layer(GovernorLayer { config: governor_conf.clone() })
         )
+        .route_layer(GovernorLayer { config: governor_conf.clone() })
         .layer(metrics_layer);
 
     let handle_clone = metrics_handle.clone();
