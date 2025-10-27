@@ -27,7 +27,7 @@ async-trait = "0.1"
 redis = { version = "0.25", features = ["tokio-comp", "connection-manager"] }
 sqlx = { version = "0.8.1", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "time", "macros", "migrate"] }
 axum-prometheus = "0.6"
-tower = { version = "0.4", features = ["timeout"] }
+tower = { version = "0.5", features = ["timeout"] }
 tower-http = { version = "0.5", features = ["trace", "cors", "fs", "limit"] }
 tower_governor = { version = "0.5", features = ["axum"] }
 dotenvy = "0.15"
